@@ -247,18 +247,26 @@ void GyroGame::timer_cb(lv_timer_t *timer) {
 
 bool GyroGame::run(void)
 {
-    // Get screen dimensions
-    lv_obj_t *scr = lv_scr_act();
-    screen_width = lv_obj_get_width(scr);
-    screen_height = lv_obj_get_height(scr);
+    // Start recording resources for recents screen snapshots
+    ESP_UTILS_CHECK_FALSE_RETURN(startRecordResource(), false, "Start record failed");
 
-    // Create container
-    container = lv_obj_create(scr);
+    // Create a new screen for the app
+    lv_obj_t *new_screen = lv_obj_create(NULL);
+    lv_scr_load(new_screen);
+
+    // Get screen dimensions from the new screen
+    screen_width = lv_obj_get_width(new_screen);
+    screen_height = lv_obj_get_height(new_screen);
+
+    // Create container on the NEW screen
+    container = lv_obj_create(new_screen);
     lv_obj_set_size(container, screen_width, screen_height);
     lv_obj_set_style_bg_color(container, lv_color_black(), 0);
     lv_obj_set_style_border_width(container, 0, 0); // Remove default border
     lv_obj_set_style_radius(container, 0, 0);       // Remove default radius
     lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(container, LV_OBJ_FLAG_CLICKABLE);     // Let clicks pass through
+    lv_obj_add_flag(container, LV_OBJ_FLAG_GESTURE_BUBBLE);  // Bubble gestures to parent (screen)
     lv_obj_center(container);
 
     // Create a Calibration Button
@@ -283,7 +291,9 @@ bool GyroGame::run(void)
     // Create Physics Timer (50Hz = 20ms)
     lv_timer_create(timer_cb, 20, this);
     
-    ESP_UTILS_CHECK_FALSE_RETURN(startRecordResource(), false, "Start record failed");
+    // End recording
+    ESP_UTILS_CHECK_FALSE_RETURN(endRecordResource(), false, "End record failed");
+
     return true;
 }
 
