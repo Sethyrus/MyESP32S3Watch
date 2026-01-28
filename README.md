@@ -1,3 +1,7 @@
+# MyESP32S3Watch
+
+ESP32-S3-Touch-AMOLED-2.06
+
 # Para flashear un binario
 
 ```

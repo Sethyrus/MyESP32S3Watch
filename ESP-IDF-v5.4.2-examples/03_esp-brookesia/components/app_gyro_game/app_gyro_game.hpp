@@ -1,0 +1,77 @@
+/*
+ * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+#pragma once
+
+#include "systems/phone/esp_brookesia_phone_app.hpp"
+#include "lvgl.h"
+
+namespace esp_brookesia::apps {
+
+/**
+ * @brief Gyro Game App: A blue square controlled by the accelerometer (QMA7981).
+ */
+class GyroGame: public systems::phone::App {
+public:
+    /**
+     * @brief Get the singleton instance of GyroGame
+     */
+    static GyroGame *requestInstance(bool use_status_bar = false, bool use_navigation_bar = false);
+
+    /**
+     * @brief Destructor
+     */
+    virtual ~GyroGame();
+
+protected:
+    /**
+     * @brief Private constructor to enforce singleton pattern
+     */
+    GyroGame(bool use_status_bar, bool use_navigation_bar);
+
+    /**
+     * @brief App Entry Point
+     */
+    bool run(void) override;
+
+    /**
+     * @brief Handle Back Event
+     */
+    bool back(void) override;
+
+    /**
+     * @brief Called when app closes
+     */
+    bool close(void) override;
+
+private:
+    static GyroGame *_instance;
+
+    // UI Elements
+    lv_obj_t *container;
+    lv_obj_t *box;
+    lv_obj_t *label_debug; // Optional debug label
+
+    // Physics State
+    float pos_x;
+    float pos_y;
+    float vel_x;
+    float vel_y;
+    int screen_width;
+    int screen_height;
+    int box_size;
+
+    // IMU State
+    bool imu_initialized;
+
+    // Internal methods
+    void init_imu();
+    void read_imu(float &acc_x, float &acc_y);
+    void update_physics(lv_timer_t *timer);
+
+    static void timer_cb(lv_timer_t *timer);
+};
+
+} // namespace esp_brookesia::apps

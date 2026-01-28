@@ -2,8 +2,8 @@
 dependencies:
   brookesia_core:
     version: "*"
-    override_path: "../../../brookesia_core"
+    override_path: "../../brookesia_core"
 
   brookesia_app_squareline_demo:
     version: "*"
-    override_path: "../../../../apps/brookesia_app_squareline_demo"
+    override_path: "../../brookesia_app_squareline_demo"
