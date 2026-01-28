@@ -47,7 +47,7 @@ GyroGame *GyroGame::requestInstance(bool use_status_bar, bool use_navigation_bar
 
 GyroGame::GyroGame(bool use_status_bar, bool use_navigation_bar):
     App(APP_NAME, nullptr, false, use_status_bar, use_navigation_bar),
-    container(nullptr), box(nullptr), label_debug(nullptr),
+    container(nullptr), box(nullptr),
     pos_x(0), pos_y(0), vel_x(0), vel_y(0),
     screen_width(0), screen_height(0), box_size(50),
     imu_initialized(false), calibration_done(false),
@@ -68,7 +68,6 @@ void GyroGame::perform_calibration() {
     if (!qmi_dev) return;
 
     ESP_LOGI(LOG_TAG, "Starting calibration...");
-    if (label_debug) lv_label_set_text(label_debug, "Calibrating...");
     
     // Simple UI feedback, force render
     lv_refr_now(NULL);
@@ -97,7 +96,6 @@ void GyroGame::perform_calibration() {
     calibration_done = true;
 
     ESP_LOGI(LOG_TAG, "Calibration done. Bias X: %.3f, Y: %.3f", accel_bias_x, accel_bias_y);
-    if (label_debug) lv_label_set_text_fmt(label_debug, "Calibrated!\nBias X:%.2f Y:%.2f", accel_bias_x, accel_bias_y);
 }
 
 void GyroGame::init_imu() {
@@ -258,17 +256,15 @@ bool GyroGame::run(void)
     container = lv_obj_create(scr);
     lv_obj_set_size(container, screen_width, screen_height);
     lv_obj_set_style_bg_color(container, lv_color_black(), 0);
+    lv_obj_set_style_border_width(container, 0, 0); // Remove default border
+    lv_obj_set_style_radius(container, 0, 0);       // Remove default radius
     lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_center(container);
-
-    label_debug = lv_label_create(container);
-    lv_label_set_text(label_debug, "Gyro Game Demo");
-    lv_obj_align(label_debug, LV_ALIGN_TOP_MID, 0, 10);
 
     // Create a Calibration Button
     lv_obj_t *btn_calib = lv_btn_create(container);
     lv_obj_t *lb = lv_label_create(btn_calib);
-    lv_label_set_text(lb, "Calibrate");
+    lv_label_set_text(lb, "Calibrar");
     lv_obj_align(btn_calib, LV_ALIGN_BOTTOM_MID, 0, -10);
     lv_obj_add_event_cb(btn_calib, event_handler, LV_EVENT_CLICKED, this);
 

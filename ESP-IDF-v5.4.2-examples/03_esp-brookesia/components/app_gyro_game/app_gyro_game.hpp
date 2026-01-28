@@ -54,7 +54,6 @@ private:
     // UI Elements
     lv_obj_t *container;
     lv_obj_t *box;
-    lv_obj_t *label_debug; // Optional debug label
 
     // Physics State
     float pos_x;
