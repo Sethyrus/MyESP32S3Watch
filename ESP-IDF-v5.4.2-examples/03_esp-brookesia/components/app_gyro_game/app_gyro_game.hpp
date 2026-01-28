@@ -7,6 +7,8 @@
 
 #include "systems/phone/esp_brookesia_phone_app.hpp"
 #include "lvgl.h"
+#include "qmi8658.h"
+#include "driver/i2c_master.h"
 
 namespace esp_brookesia::apps {
 
@@ -65,13 +67,21 @@ private:
 
     // IMU State
     bool imu_initialized;
+    bool calibration_done;
+    float accel_bias_x;
+    float accel_bias_y;
+    float smooth_ax;
+    float smooth_ay;
+    qmi8658_dev_t *qmi_dev;
 
     // Internal methods
     void init_imu();
+    void perform_calibration();
     void read_imu(float &acc_x, float &acc_y);
     void update_physics(lv_timer_t *timer);
 
     static void timer_cb(lv_timer_t *timer);
+    static void event_handler(lv_event_t *e);
 };
 
 } // namespace esp_brookesia::apps
