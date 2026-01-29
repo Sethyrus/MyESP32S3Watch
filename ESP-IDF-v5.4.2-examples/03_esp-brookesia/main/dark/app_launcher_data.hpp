@@ -11,7 +11,7 @@ namespace esp_brookesia::systems::phone {
 
 constexpr AppLauncherIcon::Data STYLESHEET_410_502_DARK_APP_LAUNCHER_ICON_DATA = {
     .main = {
-        .size = gui::StyleSize::SQUARE(200),
+        .size = gui::StyleSize::SQUARE(180),
         .layout_row_pad = 10,
     },
     .image = {
@@ -31,7 +31,7 @@ constexpr AppLauncherData STYLESHEET_410_502_DARK_APP_LAUNCHER_DATA = {
     },
     .table = {
         .default_num = 3,
-        .size = gui::StyleSize::RECT_PERCENT(100, 70),
+        .size = gui::StyleSize::RECT_PERCENT(100, 80),
     },
     .indicator = {
         .main_size = gui::StyleSize::RECT_W_PERCENT(100, 20),
