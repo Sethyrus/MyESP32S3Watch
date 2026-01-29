@@ -52,6 +52,22 @@ private:
     // Maze Configuration
     static const int ROWS = 12;
     static const int COLS = 12;
+    // Game Modes
+    enum GameMode {
+        MODE_MENU,
+        MODE_CLASSIC,
+        MODE_ADVENTURE
+    };
+
+    GameMode _current_mode;
+
+    // UI Methods
+    void show_main_menu();
+    void start_classic_game();
+    void start_adventure_game(); // Placeholder
+    void clean_up_current_screen(); // Helper to clear UI before switching
+
+    // Existing Maze Methods
     struct Cell {
         bool wall_top = true;
         bool wall_right = true;

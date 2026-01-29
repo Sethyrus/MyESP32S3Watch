@@ -538,23 +538,109 @@ void GyroMaze::draw_maze() {
     lv_obj_set_pos(_hole, hx, hy);
 }
 
+// --- App Lifecycle ---
+
 bool GyroMaze::run(void)
 {
     ESP_UTILS_CHECK_FALSE_RETURN(startRecordResource(), false, "Start record failed");
 
-    // 1. Create Screen
+    // Initialize screen dimensions early
     lv_obj_t *screen = lv_obj_create(NULL);
     lv_scr_load(screen);
-    
     screen_width = lv_obj_get_width(screen);
     screen_height = lv_obj_get_height(screen);
     
-    // Calculate dimensions
-    cell_width = (float)screen_width / COLS;
-    cell_height = (float)screen_height / ROWS;
-    ball_radius = (std::min(cell_width, cell_height) / 2.0f) * 0.7f; // 70% of half-cell
+    // Default Style for common UI
+    _container = nullptr;
+    _game_timer = nullptr;
 
-    // 2. Main Container (White Background)
+    // Show Menu
+    show_main_menu();
+
+    ESP_UTILS_CHECK_FALSE_RETURN(endRecordResource(), false, "End record failed");
+    return true;
+}
+
+void GyroMaze::clean_up_current_screen()
+{
+    // If there is an active container, clean it
+    if (_container) {
+        lv_obj_clean(_container);
+        lv_obj_del(_container);
+        _container = nullptr;
+    }
+    // Stop physics timer if running
+    if (_game_timer) {
+        lv_timer_del(_game_timer);
+        _game_timer = nullptr;
+    }
+}
+
+void GyroMaze::show_main_menu()
+{
+    _current_mode = MODE_MENU;
+    clean_up_current_screen();
+
+    lv_obj_t *screen = lv_scr_act();
+
+    // Create a simple menu container
+    _container = lv_obj_create(screen);
+    lv_obj_set_size(_container, screen_width, screen_height);
+    lv_obj_set_style_bg_color(_container, lv_color_black(), 0);
+    lv_obj_set_style_border_width(_container, 0, 0);
+    lv_obj_set_style_radius(_container, 0, 0);
+    lv_obj_center(_container);
+
+    // Title
+    lv_obj_t *label_title = lv_label_create(_container);
+    lv_label_set_text(label_title, "GYRO MAZE");
+    lv_obj_set_style_text_font(label_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(label_title, lv_color_white(), 0);
+    lv_obj_align(label_title, LV_ALIGN_TOP_MID, 0, 40);
+
+    // Button: Classic
+    lv_obj_t *btn_classic = lv_btn_create(_container);
+    lv_obj_set_size(btn_classic, 180, 50);
+    lv_obj_align(btn_classic, LV_ALIGN_CENTER, 0, -30);
+    lv_obj_set_style_bg_color(btn_classic, lv_color_hex(0x444444), 0);
+    
+    lv_obj_t *lbl_classic = lv_label_create(btn_classic);
+    lv_label_set_text(lbl_classic, "Juego Clásico");
+    lv_obj_center(lbl_classic);
+
+    // Button: Adventure
+    lv_obj_t *btn_adv = lv_btn_create(_container);
+    lv_obj_set_size(btn_adv, 180, 50);
+    lv_obj_align(btn_adv, LV_ALIGN_CENTER, 0, 40);
+    lv_obj_set_style_bg_color(btn_adv, lv_color_hex(0x222222), 0); // Darker to show disabled/beta
+    
+    lv_obj_t *lbl_adv = lv_label_create(btn_adv);
+    lv_label_set_text(lbl_adv, "Modo Procedural");
+    lv_obj_set_style_text_color(lbl_adv, lv_color_hex(0x888888), 0);
+    lv_obj_center(lbl_adv);
+
+    // Events
+    lv_obj_add_event_cb(btn_classic, [](lv_event_t *e){
+        GyroMaze *app = (GyroMaze *)lv_event_get_user_data(e);
+        app->start_classic_game();
+    }, LV_EVENT_CLICKED, this);
+
+    lv_obj_add_event_cb(btn_adv, [](lv_event_t *e){
+        // Placeholder
+        lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
+        // Visual feedback (flash red)
+        lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_RED), 0);
+    }, LV_EVENT_CLICKED, this);
+}
+
+void GyroMaze::start_classic_game()
+{
+    _current_mode = MODE_CLASSIC;
+    clean_up_current_screen();
+
+    lv_obj_t *screen = lv_scr_act();
+
+    // 2. Main Container (White Background for Classic)
     _container = lv_obj_create(screen);
     lv_obj_set_size(_container, screen_width, screen_height);
     lv_obj_set_style_bg_color(_container, lv_color_white(), 0);
@@ -568,6 +654,11 @@ bool GyroMaze::run(void)
     lv_obj_clear_flag(_container, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(_container, LV_OBJ_FLAG_GESTURE_BUBBLE);
     
+    // Calculate dimensions based on screen
+    cell_width = (float)screen_width / COLS;
+    cell_height = (float)screen_height / ROWS;
+    ball_radius = (std::min(cell_width, cell_height) / 2.0f) * 0.7f; // 70% of half-cell
+
     // 3. Wall Container
     _wall_container = lv_obj_create(_container);
     lv_obj_set_size(_wall_container, screen_width, screen_height);
@@ -610,13 +701,14 @@ bool GyroMaze::run(void)
 
     // 9. Start Logic
     _game_timer = lv_timer_create(timer_cb, 20, this); // 50Hz
-
-    ESP_UTILS_CHECK_FALSE_RETURN(endRecordResource(), false, "End record failed");
-    return true;
 }
 
 bool GyroMaze::back(void)
 {
+    if (_current_mode == MODE_CLASSIC || _current_mode == MODE_ADVENTURE) {
+        show_main_menu();
+        return true; // Use back to go up one level
+    }
     return notifyCoreClosed();
 }
 
