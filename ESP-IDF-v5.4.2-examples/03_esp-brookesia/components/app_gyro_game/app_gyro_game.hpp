@@ -7,6 +7,9 @@
 
 #include "systems/phone/esp_brookesia_phone_app.hpp"
 #include "lvgl.h"
+
+// Launcher icon declaration
+LV_IMG_DECLARE(gyro_game_icon);
 #include "qmi8658.h"
 #include "driver/i2c_master.h"
 
@@ -48,12 +51,23 @@ protected:
      */
     bool close(void) override;
 
+    /**
+     * @brief Called when app is minimized/backgrounded
+     */
+    bool pause(void) override;
+
+    /**
+     * @brief Called when app is restored from background
+     */
+    bool resume(void) override;
+
 private:
     static GyroGame *_instance;
 
     // UI Elements
-    lv_obj_t *container;
-    lv_obj_t *box;
+    lv_obj_t *_container;
+    lv_obj_t *_box;
+    lv_timer_t *_physics_timer;
 
     // Physics State
     float pos_x;
@@ -69,9 +83,9 @@ private:
     bool calibration_done;
     float accel_bias_x;
     float accel_bias_y;
-    float smooth_ax;
-    float smooth_ay;
-    qmi8658_dev_t *qmi_dev;
+    float _smooth_ax;
+    float _smooth_ay;
+    qmi8658_dev_t *_qmi_dev;
 
     // Internal methods
     void init_imu();

@@ -159,3 +159,70 @@ The `use_navigation_bar` flag determines how the user exits or switches apps:
 > [!CAUTION]
 > If you call `startRecordResource()` **after** creating UI elements, they will NOT be tracked and the app will not appear in the recents screen!
 
+---
+
+## 7. App Lifecycle Management (`pause()`/`resume()`)
+
+Override `pause()` and `resume()` to handle app state when minimized:
+
+```cpp
+bool MyApp::pause(void) {
+    // Stop background work (timers, animations, polling)
+    if (_my_timer) lv_timer_pause(_my_timer);
+    return true;
+}
+
+bool MyApp::resume(void) {
+    // Restart background work
+    if (_my_timer) lv_timer_resume(_my_timer);
+    return true;
+}
+```
+
+> [!TIP]
+> Without implementing `pause()`, your timers continue to run even when the app is hidden, wasting CPU cycles and battery!
+
+---
+
+## 8. Naming Conventions
+
+Follow the official recommendation to avoid symbol conflicts between apps:
+
+*   **Constants**: Use `<APP_NAME>_` prefix (e.g., `GYRO_GAME_PHYSICS_FRICTION`).
+*   **Member Variables**: Use underscore prefix (e.g., `_container`, `_physics_timer`).
+*   **Static Functions**: Use `<app_name>_` prefix for C-style static functions if needed.
+
+---
+
+## 9. Icon Integration
+
+### A. Format Requirements
+The launcher requires icons to be compiled as C-arrays, not loaded from the filesystem at runtime.
+*   **Format**: 112x112 pixels.
+*   **Color Format**: `CF_TRUE_COLOR_ALPHA` (ARGB8888).
+*   **Source**: You must convert your PNG to a C file using [LVGL Image Converter](https://lvgl.io/tools/imageconverter) or similar tools.
+
+### B. Implementation Steps
+1.  **Include File**: Place `your_icon.c` in your component folder.
+2.  **Declare in Header**: In your `app_my_app.hpp`:
+    ```cpp
+    #include "lvgl.h"
+    LV_IMG_DECLARE(your_icon_variable_name); // Check .c file for exact name
+    ```
+3.  **Pass to Constructor**: In `app_my_app.cpp`, pass the address to the base `App` constructor:
+    ```cpp
+    MyApp::MyApp(...) : App("Name", &your_icon_variable_name, ...) { ... }
+    ```
+
+### C. Aesthetic Improvements (Script)
+To match the system's aesthetic (rounded corners, shadow), use the provided python script:
+`components/app_gyro_game/modify_icon.py`
+
+```bash
+# Basic usage (overwrites input file)
+python3 modify_icon.py my_icon.c
+
+# Advanced usage
+python3 modify_icon.py my_icon.c --radius 28 --shadow 0.2 --backup
+```
+This script modifies the pixel data directly in the C array to add transparency for corners and a subtle bottom shadow.
