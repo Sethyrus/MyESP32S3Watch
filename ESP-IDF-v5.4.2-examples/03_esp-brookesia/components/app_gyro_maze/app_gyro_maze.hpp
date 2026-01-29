@@ -17,6 +17,7 @@
 #include "qmi8658.h"
 #include "driver/i2c_master.h"
 #include <vector>
+#include "menu_system.hpp"
 
 // Launcher icon declaration
 LV_IMG_DECLARE(gyro_maze_icon);

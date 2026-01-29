@@ -583,54 +583,24 @@ void GyroMaze::show_main_menu()
 
     lv_obj_t *screen = lv_scr_act();
 
-    // Create a simple menu container
-    _container = lv_obj_create(screen);
-    lv_obj_set_size(_container, screen_width, screen_height);
-    lv_obj_set_style_bg_color(_container, lv_color_black(), 0);
-    lv_obj_set_style_border_width(_container, 0, 0);
-    lv_obj_set_style_radius(_container, 0, 0);
-    lv_obj_center(_container);
+    std::vector<gyro_maze::MenuItem> items = {
+        {
+            "Juego Normal", 
+            [this]() { this->start_classic_game(); }, 
+            false
+        },
+        {
+            "Modo Procedural", 
+            [this]() { 
+                // No action for disabled button
+            }, 
+            true // Disabled visually
+        }
+    };
 
-    // Title
-    lv_obj_t *label_title = lv_label_create(_container);
-    lv_label_set_text(label_title, "GYRO MAZE");
-    lv_obj_set_style_text_font(label_title, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(label_title, lv_color_white(), 0);
-    lv_obj_align(label_title, LV_ALIGN_TOP_MID, 0, 40);
-
-    // Button: Classic
-    lv_obj_t *btn_classic = lv_btn_create(_container);
-    lv_obj_set_size(btn_classic, 180, 50);
-    lv_obj_align(btn_classic, LV_ALIGN_CENTER, 0, -30);
-    lv_obj_set_style_bg_color(btn_classic, lv_color_hex(0x444444), 0);
-    
-    lv_obj_t *lbl_classic = lv_label_create(btn_classic);
-    lv_label_set_text(lbl_classic, "Juego Clásico");
-    lv_obj_center(lbl_classic);
-
-    // Button: Adventure
-    lv_obj_t *btn_adv = lv_btn_create(_container);
-    lv_obj_set_size(btn_adv, 180, 50);
-    lv_obj_align(btn_adv, LV_ALIGN_CENTER, 0, 40);
-    lv_obj_set_style_bg_color(btn_adv, lv_color_hex(0x222222), 0); // Darker to show disabled/beta
-    
-    lv_obj_t *lbl_adv = lv_label_create(btn_adv);
-    lv_label_set_text(lbl_adv, "Modo Procedural");
-    lv_obj_set_style_text_color(lbl_adv, lv_color_hex(0x888888), 0);
-    lv_obj_center(lbl_adv);
-
-    // Events
-    lv_obj_add_event_cb(btn_classic, [](lv_event_t *e){
-        GyroMaze *app = (GyroMaze *)lv_event_get_user_data(e);
-        app->start_classic_game();
-    }, LV_EVENT_CLICKED, this);
-
-    lv_obj_add_event_cb(btn_adv, [](lv_event_t *e){
-        // Placeholder
-        lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
-        // Visual feedback (flash red)
-        lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_RED), 0);
-    }, LV_EVENT_CLICKED, this);
+    // Use our new reusable menu system
+    // Note: We assign the result to _container so clean_up_current_screen() can delete it later
+    _container = gyro_maze::MenuSystem::create(screen, "GYRO MAZE", items);
 }
 
 void GyroMaze::start_classic_game()
