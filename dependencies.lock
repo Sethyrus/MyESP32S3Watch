@@ -2,7 +2,7 @@ dependencies:
   brookesia_core:
     dependencies: []
     source:
-      path: /Users/alex/Proyectos/Alex/ESP32/MyESP32S3Watch/ESP-IDF-v5.4.2-examples/03_esp-brookesia/components/brookesia_core
+      path: /Users/alex/Proyectos/Alex/ESP32/MyESP32S3Watch/components/brookesia_core
       type: local
     version: 0.6.0-beta2
   espressif/cmake_utilities:
