@@ -1,7 +1,7 @@
 # To do
 
-- Mejorar generación del laberinto
 - Quitar "ojos" modo adventure
+- Al ganar en el Simple Maze, generar nuevo laberinto
 
 # Useful links
 

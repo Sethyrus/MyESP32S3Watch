@@ -8,7 +8,6 @@
 #include <cmath>
 #include <algorithm>
 #include <limits>
-#include <stack>
 
 static const char *TAG = "AdventureMode";
 
@@ -189,44 +188,45 @@ void AdventureMode::generate_maze() {
     _maze[_exit_row][_exit_col].visited = false;
     ESP_LOGI(TAG, "Exit at (%d, %d)", _exit_row, _exit_col);
 
-    // 4. Recursive Backtracker from center
+    // 4. Growing Tree from center (more branching)
     int start_r = MAZE_ROWS / 2;
     int start_c = MAZE_COLS / 2;
     while (!_maze[start_r][start_c].valid && start_r > 0) start_r--;
 
-    std::stack<std::pair<int, int>> stack;
+    std::vector<std::pair<int, int>> active;
+    constexpr int kRandomSelectPercent = 60; // higher = more branching
+
     _maze[start_r][start_c].visited = true;
-    stack.push({start_r, start_c});
+    active.push_back({start_r, start_c});
 
-    auto get_unvisited_neighbors = [this](int r, int c) {
-        std::vector<std::pair<int, int>> neighbors;
-        if (r > 0 && !_maze[r - 1][c].visited && _maze[r - 1][c].valid)
-            neighbors.push_back({r - 1, c});
-        if (r < MAZE_ROWS - 1 && !_maze[r + 1][c].visited && _maze[r + 1][c].valid)
-            neighbors.push_back({r + 1, c});
-        if (c > 0 && !_maze[r][c - 1].visited && _maze[r][c - 1].valid)
-            neighbors.push_back({r, c - 1});
-        if (c < MAZE_COLS - 1 && !_maze[r][c + 1].visited && _maze[r][c + 1].valid)
-            neighbors.push_back({r, c + 1});
-        return neighbors;
-    };
+    while (!active.empty()) {
+        const bool pick_random = (esp_random() % 100) < kRandomSelectPercent;
+        size_t index = pick_random ? (esp_random() % active.size()) : (active.size() - 1);
+        int r = active[index].first;
+        int c = active[index].second;
 
-    while (!stack.empty()) {
-        auto [r, c] = stack.top();
-        auto neighbors = get_unvisited_neighbors(r, c);
+        std::vector<int> neighbors; // 0: Top, 1: Right, 2: Bottom, 3: Left
+        if (r > 0 && !_maze[r - 1][c].visited && _maze[r - 1][c].valid) neighbors.push_back(0);
+        if (c < MAZE_COLS - 1 && !_maze[r][c + 1].visited && _maze[r][c + 1].valid) neighbors.push_back(1);
+        if (r < MAZE_ROWS - 1 && !_maze[r + 1][c].visited && _maze[r + 1][c].valid) neighbors.push_back(2);
+        if (c > 0 && !_maze[r][c - 1].visited && _maze[r][c - 1].valid) neighbors.push_back(3);
 
         if (neighbors.empty()) {
-            stack.pop();
-        } else {
-            auto [nr, nc] = neighbors[esp_random() % neighbors.size()];
-            // Remove wall between current and neighbor
-            if (nr == r - 1) { _maze[r][c].wall_top = false; _maze[nr][nc].wall_bottom = false; }
-            if (nr == r + 1) { _maze[r][c].wall_bottom = false; _maze[nr][nc].wall_top = false; }
-            if (nc == c - 1) { _maze[r][c].wall_left = false; _maze[nr][nc].wall_right = false; }
-            if (nc == c + 1) { _maze[r][c].wall_right = false; _maze[nr][nc].wall_left = false; }
-            _maze[nr][nc].visited = true;
-            stack.push({nr, nc});
+            active[index] = active.back();
+            active.pop_back();
+            continue;
         }
+
+        int next_dir = neighbors[esp_random() % neighbors.size()];
+        int nr = r;
+        int nc = c;
+        if (next_dir == 0) { nr = r - 1; _maze[r][c].wall_top = false; _maze[nr][nc].wall_bottom = false; }
+        else if (next_dir == 1) { nc = c + 1; _maze[r][c].wall_right = false; _maze[nr][nc].wall_left = false; }
+        else if (next_dir == 2) { nr = r + 1; _maze[r][c].wall_bottom = false; _maze[nr][nc].wall_top = false; }
+        else if (next_dir == 3) { nc = c - 1; _maze[r][c].wall_left = false; _maze[nr][nc].wall_right = false; }
+
+        _maze[nr][nc].visited = true;
+        active.push_back({nr, nc});
     }
 
     ESP_LOGI(TAG, "Maze generation complete.");

@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <cmath>
-#include <stack>
 #include <vector>
 #include <cstdlib>
 #include <ctime>
@@ -198,59 +197,55 @@ void GyroMaze::generate_maze()
         maze[start_row][start_col].visited = false;
     }
 
-    // 3. Recursive Backtracker
-    std::stack<std::pair<int, int>> stack;
-    
-    // Mark start as visited for algorithm
-    maze[start_row][start_col].visited = true;
-    stack.push({start_row, start_col});
+    // 3. Growing Tree (biased random selection for more branching)
+    std::vector<std::pair<int, int>> active;
+    constexpr int kRandomSelectPercent = 30; // higher = more branching
 
-    while(!stack.empty()) {
-        std::pair<int, int> current = stack.top();
-        int r = current.first;
-        int c = current.second;
-        
+    maze[start_row][start_col].visited = true;
+    active.push_back({start_row, start_col});
+
+    while (!active.empty()) {
+        const bool pick_random = (esp_random() % 100) < kRandomSelectPercent;
+        size_t index = pick_random ? (esp_random() % active.size()) : (active.size() - 1);
+        int r = active[index].first;
+        int c = active[index].second;
+
         // Find unvisited neighbors that are VALID
         std::vector<int> neighbors; // 0: Top, 1: Right, 2: Bottom, 3: Left
-        
-        // Top
-        if(r > 0 && maze[r-1][c].valid && !maze[r-1][c].visited) neighbors.push_back(0);
-        // Right
-        if(c < COLS-1 && maze[r][c+1].valid && !maze[r][c+1].visited) neighbors.push_back(1);
-        // Bottom
-        if(r < ROWS-1 && maze[r+1][c].valid && !maze[r+1][c].visited) neighbors.push_back(2);
-        // Left
-        if(c > 0 && maze[r][c-1].valid && !maze[r][c-1].visited) neighbors.push_back(3);
+        if (r > 0 && maze[r - 1][c].valid && !maze[r - 1][c].visited) neighbors.push_back(0);
+        if (c < COLS - 1 && maze[r][c + 1].valid && !maze[r][c + 1].visited) neighbors.push_back(1);
+        if (r < ROWS - 1 && maze[r + 1][c].valid && !maze[r + 1][c].visited) neighbors.push_back(2);
+        if (c > 0 && maze[r][c - 1].valid && !maze[r][c - 1].visited) neighbors.push_back(3);
 
-        if(!neighbors.empty()) {
-            // Pick random neighbor
-            int next_dir = neighbors[esp_random() % neighbors.size()];
-            
-            // Remove walls
-            if(next_dir == 0) { // Top
-                maze[r][c].wall_top = false;
-                maze[r-1][c].wall_bottom = false;
-                maze[r-1][c].visited = true;
-                stack.push({r-1, c});
-            } else if(next_dir == 1) { // Right
-                maze[r][c].wall_right = false;
-                maze[r][c+1].wall_left = false;
-                maze[r][c+1].visited = true;
-                stack.push({r, c+1});
-            } else if(next_dir == 2) { // Bottom
-                maze[r][c].wall_bottom = false;
-                maze[r+1][c].wall_top = false;
-                maze[r+1][c].visited = true;
-                stack.push({r+1, c});
-            } else if(next_dir == 3) { // Left
-                maze[r][c].wall_left = false;
-                maze[r][c-1].wall_right = false;
-                maze[r][c-1].visited = true;
-                stack.push({r, c-1});
-            }
-        } else {
-            stack.pop();
+        if (neighbors.empty()) {
+            active[index] = active.back();
+            active.pop_back();
+            continue;
         }
+
+        int next_dir = neighbors[esp_random() % neighbors.size()];
+        int nr = r;
+        int nc = c;
+        if (next_dir == 0) { // Top
+            nr = r - 1;
+            maze[r][c].wall_top = false;
+            maze[nr][nc].wall_bottom = false;
+        } else if (next_dir == 1) { // Right
+            nc = c + 1;
+            maze[r][c].wall_right = false;
+            maze[nr][nc].wall_left = false;
+        } else if (next_dir == 2) { // Bottom
+            nr = r + 1;
+            maze[r][c].wall_bottom = false;
+            maze[nr][nc].wall_top = false;
+        } else if (next_dir == 3) { // Left
+            nc = c - 1;
+            maze[r][c].wall_left = false;
+            maze[nr][nc].wall_right = false;
+        }
+
+        maze[nr][nc].visited = true;
+        active.push_back({nr, nc});
     }
 }
 
