@@ -17,6 +17,7 @@
 #include "qmi8658.h"
 #include "driver/i2c_master.h"
 #include <vector>
+#include <cstdint>
 #include "menu_system.hpp"
 
 // Forward declaration for Adventure Mode
@@ -126,6 +127,7 @@ private:
 
     // Adventure Mode
     gyro_maze::AdventureMode *_adventure_mode;
+    uint32_t _last_adventure_tick_ms;
 
     // Friend class for Adventure Mode to access IMU
     friend class gyro_maze::AdventureMode;

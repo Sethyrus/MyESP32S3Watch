@@ -59,7 +59,8 @@ GyroMaze::GyroMaze(bool use_status_bar, bool use_navigation_bar):
     accel_bias_x(0), accel_bias_y(0), 
     _smooth_ax(0), _smooth_ay(0),
     _qmi_dev(nullptr),
-    _adventure_mode(nullptr)
+    _adventure_mode(nullptr),
+    _last_adventure_tick_ms(0)
 {
 }
 
@@ -583,6 +584,8 @@ void GyroMaze::clean_up_current_screen()
         lv_timer_del(_game_timer);
         _game_timer = nullptr;
     }
+
+    _last_adventure_tick_ms = 0;
 }
 
 void GyroMaze::show_main_menu()
@@ -714,21 +717,33 @@ void GyroMaze::start_adventure_game()
     // Initialize IMU
     init_imu();
 
+    _last_adventure_tick_ms = lv_tick_get();
+
     // Start physics timer (same rate as classic)
     _game_timer = lv_timer_create([](lv_timer_t *t) {
         GyroMaze *self = (GyroMaze *)lv_timer_get_user_data(t);
         if (self && self->_adventure_mode && self->_current_mode == MODE_ADVENTURE) {
             if (!self->calibration_done) {
                 self->init_imu();
+                self->_last_adventure_tick_ms = lv_tick_get();
                 return;
             }
             
             // Read IMU
             float ax, ay;
             self->read_imu(ax, ay);
+
+            uint32_t now_ms = lv_tick_get();
+            uint32_t elapsed_ms = now_ms - self->_last_adventure_tick_ms;
+            self->_last_adventure_tick_ms = now_ms;
+
+            float dt = elapsed_ms * 0.001f;
+            if (dt < 0.005f || dt > 0.100f) {
+                dt = 0.02f;
+            }
             
             // Update Adventure Mode (physics + render)
-            self->_adventure_mode->update(ax, ay, 0.02f); // 20ms dt
+            self->_adventure_mode->update(ax, ay, dt);
             
             // Check win
             if (self->_adventure_mode->check_win()) {

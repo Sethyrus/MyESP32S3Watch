@@ -7,6 +7,7 @@
 #include "esp_random.h"
 #include <cmath>
 #include <algorithm>
+#include <limits>
 #include <stack>
 
 static const char *TAG = "AdventureMode";
@@ -25,7 +26,11 @@ AdventureMode::AdventureMode(esp_brookesia::apps::GyroMaze *parent)
       _ball_radius(0),
       _screen_width(0), _screen_height(0),
       _container(nullptr), _ball(nullptr), _hole(nullptr), _wall_container(nullptr),
-      _last_render_camera_x(-9999), _last_render_camera_y(-9999),  // Force initial render
+      _render_start_row(-1), _render_start_col(-1),
+      _active_wall_count(0),
+      _last_world_offset_x(std::numeric_limits<lv_coord_t>::max()),
+      _last_world_offset_y(std::numeric_limits<lv_coord_t>::max()),
+      _hole_hidden(false),
       _wall_pool_index(0)
 {
 }
@@ -58,21 +63,30 @@ void AdventureMode::init(lv_obj_t *container, int screen_w, int screen_h, int vi
     lv_obj_clear_flag(_wall_container, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
     // Pre-allocate wall object pool
+    _wall_pool.clear();
     _wall_pool.reserve(MAX_WALL_OBJECTS);
+    _wall_pool_index = 0;
+    _active_wall_count = 0;
+    _render_start_row = -1;
+    _render_start_col = -1;
+    _last_world_offset_x = std::numeric_limits<lv_coord_t>::max();
+    _last_world_offset_y = std::numeric_limits<lv_coord_t>::max();
     for (int i = 0; i < MAX_WALL_OBJECTS; ++i) {
         lv_obj_t *wall = lv_obj_create(_wall_container);
         lv_obj_set_style_bg_color(wall, lv_color_hex(0x8B4513), 0); // Brown
         lv_obj_set_style_border_width(wall, 0, 0);
+        lv_obj_set_style_radius(wall, 0, 0);
         lv_obj_add_flag(wall, LV_OBJ_FLAG_HIDDEN);
         _wall_pool.push_back(wall);
     }
 
-    // Hole (Black circle, will be positioned later)
-    _hole = lv_obj_create(_container);
+    // Hole lives in world space (inside wall container)
+    _hole = lv_obj_create(_wall_container);
     lv_obj_set_size(_hole, (lv_coord_t)(_ball_radius * 2), (lv_coord_t)(_ball_radius * 2));
     lv_obj_set_style_bg_color(_hole, lv_color_black(), 0);
     lv_obj_set_style_radius(_hole, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_border_width(_hole, 0, 0);
+    _hole_hidden = false;
 
     // Ball (Red circle, fixed at screen center)
     _ball = lv_obj_create(_container);
@@ -91,21 +105,25 @@ void AdventureMode::init(lv_obj_t *container, int screen_w, int screen_h, int vi
     reset_player();
 
     // Initial Draw
-    draw_visible_walls();
+    draw_visible_walls(true);
+    update_world_transform();
 }
 
 void AdventureMode::cleanup() {
-    // Clear wall pool
-    for (auto *wall : _wall_pool) {
-        if (wall) lv_obj_del(wall);
-    }
+    // Ball is outside wall container
+    if (_ball) { lv_obj_del(_ball); _ball = nullptr; }
+
+    // Deleting wall container also deletes all pooled wall objects and the hole
+    if (_wall_container) { lv_obj_del(_wall_container); _wall_container = nullptr; }
+
+    _hole = nullptr;
     _wall_pool.clear();
     _wall_pool_index = 0;
-
-    // Clear other objects
-    if (_ball) { lv_obj_del(_ball); _ball = nullptr; }
-    if (_hole) { lv_obj_del(_hole); _hole = nullptr; }
-    if (_wall_container) { lv_obj_del(_wall_container); _wall_container = nullptr; }
+    _active_wall_count = 0;
+    _render_start_row = -1;
+    _render_start_col = -1;
+    _last_world_offset_x = std::numeric_limits<lv_coord_t>::max();
+    _last_world_offset_y = std::numeric_limits<lv_coord_t>::max();
 }
 
 void AdventureMode::reset_player() {
@@ -303,58 +321,45 @@ void AdventureMode::update_camera() {
     _camera_y = std::max(0.0f, std::min(_camera_y, max_camera_y));
 }
 
-void AdventureMode::reset_wall_pool() {
-    for (auto *wall : _wall_pool) {
-        lv_obj_add_flag(wall, LV_OBJ_FLAG_HIDDEN);
-    }
-    _wall_pool_index = 0;
-}
-
 lv_obj_t* AdventureMode::get_wall_from_pool() {
     if (_wall_pool_index >= (int)_wall_pool.size()) {
         ESP_LOGW(TAG, "Wall pool exhausted!");
         return nullptr;
     }
     lv_obj_t *wall = _wall_pool[_wall_pool_index++];
-    lv_obj_clear_flag(wall, LV_OBJ_FLAG_HIDDEN);
+    if (lv_obj_has_flag(wall, LV_OBJ_FLAG_HIDDEN)) {
+        lv_obj_clear_flag(wall, LV_OBJ_FLAG_HIDDEN);
+    }
     return wall;
 }
 
-bool AdventureMode::is_cell_in_visible_area(int row, int col) const {
-    float cell_x = col * _cell_width;
-    float cell_y = row * _cell_height;
-    float cell_x2 = cell_x + _cell_width;
-    float cell_y2 = cell_y + _cell_height;
+void AdventureMode::draw_visible_walls(bool force) {
+    const int target_start_row = std::clamp((int)(_camera_y / _cell_height), 0, MAZE_ROWS - 1);
+    const int target_start_col = std::clamp((int)(_camera_x / _cell_width), 0, MAZE_COLS - 1);
 
-    float view_x2 = _camera_x + _visible_cols * _cell_width;
-    float view_y2 = _camera_y + _visible_rows * _cell_height;
+    if (!force && target_start_row == _render_start_row && target_start_col == _render_start_col) {
+        return;
+    }
 
-    return !(cell_x2 < _camera_x || cell_x > view_x2 || cell_y2 < _camera_y || cell_y > view_y2);
-}
+    _render_start_row = target_start_row;
+    _render_start_col = target_start_col;
+    _wall_pool_index = 0;
 
-void AdventureMode::draw_visible_walls() {
-    reset_wall_pool();
+    constexpr int wall_thickness = 2;
+    const int end_row = std::min(MAZE_ROWS, _render_start_row + _visible_rows + 2);
+    const int end_col = std::min(MAZE_COLS, _render_start_col + _visible_cols + 2);
 
-    const int wall_thickness = 2;
+    for (int r = _render_start_row; r < end_row; ++r) {
+        for (int c = _render_start_col; c < end_col; ++c) {
+            const int local_col = c - _render_start_col;
+            const int local_row = r - _render_start_row;
 
-    // Determine visible cell range
-    int start_row = (int)(_camera_y / _cell_height);
-    int end_row = start_row + _visible_rows + 1;
-    int start_col = (int)(_camera_x / _cell_width);
-    int end_col = start_col + _visible_cols + 1;
-
-    start_row = std::max(0, start_row);
-    end_row = std::min(MAZE_ROWS, end_row);
-    start_col = std::max(0, start_col);
-    end_col = std::min(MAZE_COLS, end_col);
-
-    for (int r = start_row; r < end_row; ++r) {
-        for (int c = start_col; c < end_col; ++c) {
-            // Position relative to camera
-            int cx = (int)(c * _cell_width - _camera_x);
-            int cy = (int)(r * _cell_height - _camera_y);
-            int cw = (int)_cell_width;
-            int ch = (int)_cell_height;
+            const int cx = (int)std::lround(local_col * _cell_width);
+            const int cy = (int)std::lround(local_row * _cell_height);
+            const int next_cx = (int)std::lround((local_col + 1) * _cell_width);
+            const int next_cy = (int)std::lround((local_row + 1) * _cell_height);
+            const int cw = next_cx - cx;
+            const int ch = next_cy - cy;
 
             // Draw solid block for invalid cells
             if (!_maze[r][c].valid) {
@@ -362,11 +367,9 @@ void AdventureMode::draw_visible_walls() {
                 if (!block) continue;
                 lv_obj_set_size(block, cw, ch);
                 lv_obj_set_pos(block, cx, cy);
-                lv_obj_set_style_radius(block, 0, 0);
                 continue;
             }
 
-            // Draw walls
             if (_maze[r][c].wall_top) {
                 lv_obj_t *w = get_wall_from_pool();
                 if (!w) continue;
@@ -379,7 +382,6 @@ void AdventureMode::draw_visible_walls() {
                 lv_obj_set_size(w, wall_thickness, ch + wall_thickness);
                 lv_obj_set_pos(w, cx, cy);
             }
-            // Bottom and Right only for boundary cells or if no neighbor
             if (r == MAZE_ROWS - 1 && _maze[r][c].wall_bottom) {
                 lv_obj_t *w = get_wall_from_pool();
                 if (!w) continue;
@@ -395,17 +397,52 @@ void AdventureMode::draw_visible_walls() {
         }
     }
 
-    // Position Hole relative to camera
-    float hole_x = _exit_col * _cell_width + (_cell_width - _ball_radius * 2) / 2 - _camera_x;
-    float hole_y = _exit_row * _cell_height + (_cell_height - _ball_radius * 2) / 2 - _camera_y;
-    lv_obj_set_pos(_hole, (lv_coord_t)hole_x, (lv_coord_t)hole_y);
-    
-    // Hide hole if off-screen
-    if (hole_x < -_ball_radius * 2 || hole_x > _screen_width ||
-        hole_y < -_ball_radius * 2 || hole_y > _screen_height) {
-        lv_obj_add_flag(_hole, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        lv_obj_clear_flag(_hole, LV_OBJ_FLAG_HIDDEN);
+    for (int i = _wall_pool_index; i < _active_wall_count; ++i) {
+        lv_obj_t *wall = _wall_pool[i];
+        if (!lv_obj_has_flag(wall, LV_OBJ_FLAG_HIDDEN)) {
+            lv_obj_add_flag(wall, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    _active_wall_count = _wall_pool_index;
+
+    const float render_origin_x = _render_start_col * _cell_width;
+    const float render_origin_y = _render_start_row * _cell_height;
+    const float hole_x = _exit_col * _cell_width + (_cell_width - _ball_radius * 2.0f) / 2.0f - render_origin_x;
+    const float hole_y = _exit_row * _cell_height + (_cell_height - _ball_radius * 2.0f) / 2.0f - render_origin_y;
+
+    lv_obj_set_pos(_hole, (lv_coord_t)std::lround(hole_x), (lv_coord_t)std::lround(hole_y));
+
+}
+
+void AdventureMode::update_world_transform() {
+    if (!_wall_container || _render_start_row < 0 || _render_start_col < 0) {
+        return;
+    }
+
+    const float render_origin_x = _render_start_col * _cell_width;
+    const float render_origin_y = _render_start_row * _cell_height;
+
+    const lv_coord_t world_x = (lv_coord_t)std::lround(render_origin_x - _camera_x);
+    const lv_coord_t world_y = (lv_coord_t)std::lround(render_origin_y - _camera_y);
+
+    if (world_x != _last_world_offset_x || world_y != _last_world_offset_y) {
+        lv_obj_set_pos(_wall_container, world_x, world_y);
+        _last_world_offset_x = world_x;
+        _last_world_offset_y = world_y;
+    }
+
+    const float hole_screen_x = _exit_col * _cell_width + (_cell_width - _ball_radius * 2.0f) / 2.0f - _camera_x;
+    const float hole_screen_y = _exit_row * _cell_height + (_cell_height - _ball_radius * 2.0f) / 2.0f - _camera_y;
+    const float hole_diameter = _ball_radius * 2.0f;
+    const bool hide_hole = (hole_screen_x < -hole_diameter || hole_screen_x > _screen_width ||
+                            hole_screen_y < -hole_diameter || hole_screen_y > _screen_height);
+    if (hide_hole != _hole_hidden) {
+        if (hide_hole) {
+            lv_obj_add_flag(_hole, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(_hole, LV_OBJ_FLAG_HIDDEN);
+        }
+        _hole_hidden = hide_hole;
     }
 }
 
@@ -452,24 +489,29 @@ void AdventureMode::check_collision(float new_x, float new_y, float &out_x, floa
 }
 
 void AdventureMode::update(float ax, float ay, float dt) {
-    // Apply acceleration (from gyroscope)
-    _vel_x += ax * ACCEL_FACTOR;
-    _vel_y += ay * ACCEL_FACTOR;
+    constexpr float base_dt = 0.02f; // 20ms timer target
+    float dt_scale = (dt > 0.0f) ? (dt / base_dt) : 1.0f;
+    dt_scale = std::clamp(dt_scale, 0.5f, 2.5f);
 
-    // Apply friction
-    _vel_x *= FRICTION;
-    _vel_y *= FRICTION;
+    // Keep physics behavior stable even if frame time fluctuates
+    _vel_x += ax * ACCEL_FACTOR * dt_scale;
+    _vel_y += ay * ACCEL_FACTOR * dt_scale;
 
-    // Clamp velocity
-    float speed = std::sqrt(_vel_x * _vel_x + _vel_y * _vel_y);
-    if (speed > MAX_VELOCITY) {
-        _vel_x = (_vel_x / speed) * MAX_VELOCITY;
-        _vel_y = (_vel_y / speed) * MAX_VELOCITY;
+    const float frame_friction = std::pow(FRICTION, dt_scale);
+    _vel_x *= frame_friction;
+    _vel_y *= frame_friction;
+
+    const float speed_sq = _vel_x * _vel_x + _vel_y * _vel_y;
+    const float max_speed_sq = MAX_VELOCITY * MAX_VELOCITY;
+    if (speed_sq > max_speed_sq) {
+        const float inv_speed = MAX_VELOCITY / std::sqrt(speed_sq);
+        _vel_x *= inv_speed;
+        _vel_y *= inv_speed;
     }
 
     // Calculate new position
-    float new_x = _player_x + _vel_x;
-    float new_y = _player_y + _vel_y;
+    float new_x = _player_x + _vel_x * dt_scale;
+    float new_y = _player_y + _vel_y * dt_scale;
 
     // Collision check
     float final_x, final_y;
@@ -481,20 +523,10 @@ void AdventureMode::update(float ax, float ay, float dt) {
     // Update camera to follow player
     update_camera();
 
-    // OPTIMIZATION: Only redraw walls if camera moved significantly
-    float camera_dx = std::abs(_camera_x - _last_render_camera_x);
-    float camera_dy = std::abs(_camera_y - _last_render_camera_y);
-    
-    if (camera_dx > CAMERA_REDRAW_THRESHOLD || camera_dy > CAMERA_REDRAW_THRESHOLD) {
-        draw_visible_walls();
-        _last_render_camera_x = _camera_x;
-        _last_render_camera_y = _camera_y;
-    } else {
-        // Camera didn't move much, just update hole position (it's cheap)
-        float hole_x = _exit_col * _cell_width + (_cell_width - _ball_radius * 2) / 2 - _camera_x;
-        float hole_y = _exit_row * _cell_height + (_cell_height - _ball_radius * 2) / 2 - _camera_y;
-        lv_obj_set_pos(_hole, (lv_coord_t)hole_x, (lv_coord_t)hole_y);
-    }
+    // Redraw only when we cross into a different maze cell.
+    // Between those events, move the world container for smooth scrolling.
+    draw_visible_walls();
+    update_world_transform();
 }
 
 bool AdventureMode::check_win() const {

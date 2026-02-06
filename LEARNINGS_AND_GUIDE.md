@@ -259,7 +259,7 @@ This script modifies the pixel data directly in the C array to add transparency 
 
 ### B. Optimization Strategies
 
-#### 1. **Conditional Rendering** (Most Important)
+#### 1. **Conditional Rendering**
 Only redraw UI elements when they actually change:
 
 ```cpp
@@ -278,7 +278,7 @@ void update() {
 }
 ```
 
-**Impact**: In the Gyro Maze Adventure mode, this reduced redraw calls from **50/sec** to **~5-10/sec**, improving FPS significantly.
+**Impact**: This drastically cuts redraw workload. For scrollable worlds, combine it with the cell-aligned transform strategy in section 4 to avoid visible "step" motion.
 
 #### 2. **Object Pooling**
 Pre-create LVGL objects and reuse them instead of creating/deleting dynamically:
@@ -310,6 +310,41 @@ void render() {
 #### 3. **Minimize Style Changes**
 Set styles once at creation, not every frame. Use flags for show/hide instead of changing opacity/color repeatedly.
 
+#### 4. **Adventure Mode: Cell-Aligned Render Window + World Transform**
+For scrollable mazes, avoid re-laying out every wall object on every frame. Use this pattern:
+
+1. Render walls in a local window aligned to the current cell (`render_start_row/col`).
+2. Redraw wall objects **only** when the camera crosses into a different cell.
+3. On every physics tick, move a single parent container with sub-cell offset (`origin - camera`) for smooth scrolling.
+4. Keep pooled wall objects alive and only hide/show the delta (unused tail), not the entire pool every redraw.
+
+```cpp
+// Heavy path (occasional): only when camera enters a new cell
+if (cell_start_changed) {
+    redraw_visible_walls();
+}
+
+// Cheap path (every frame): one transform
+lv_obj_set_pos(world_container, origin_x - camera_x, origin_y - camera_y);
+```
+
+**Why this works**:
+- Keeps camera movement visually smooth (no 5px jump effect).
+- Reduces expensive LVGL object mutations from "many objects per frame" to "many objects per cell transition".
+- Maintains responsiveness while preserving the object-pool approach.
+
+#### 5. **Frame-Time-Aware Physics (dt scaling)**
+If the timer jitter increases under load, fixed-per-frame physics makes movement feel slower in real time. Normalize updates with a base step:
+
+```cpp
+float dt_scale = clamp(dt / 0.02f, 0.5f, 2.5f);
+vel += accel * dt_scale;
+vel *= powf(FRICTION, dt_scale);
+pos += vel * dt_scale;
+```
+
+This keeps controls and speed more consistent even when frame cadence is not perfectly stable.
+
 ### C. Performance Monitoring
 Use ESP-IDF's built-in profiling:
 ```cpp
@@ -322,4 +357,3 @@ ESP_LOGI(TAG, "Render took %lld us", elapsed);
 ```
 
 Target: Keep render time **< 10ms** for 50 FPS responsiveness.
-

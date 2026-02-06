@@ -8,7 +8,6 @@
 
 #include "lvgl.h"
 #include <vector>
-#include <functional>
 #include <cstdint>
 
 // Forward declaration for GyroMaze in its actual namespace
@@ -71,9 +70,11 @@ private:
     lv_obj_t *_hole;
     lv_obj_t *_wall_container;
 
-    // Performance: Track last rendered camera position
-    float _last_render_camera_x, _last_render_camera_y;
-    static constexpr float CAMERA_REDRAW_THRESHOLD = 5.0f; // pixels
+    // Performance: Cell-aligned render window + cheap per-frame world translation
+    int _render_start_row, _render_start_col;
+    int _active_wall_count;
+    lv_coord_t _last_world_offset_x, _last_world_offset_y;
+    bool _hole_hidden;
 
     // Wall Object Pool (for efficient rendering)
     static constexpr int MAX_WALL_OBJECTS = 600; // More than enough for 12x12 * 4 walls
@@ -83,19 +84,17 @@ private:
     // Methods
     void generate_maze();
     void apply_corner_mask(); // Applies to visible area corners
-    void draw_visible_walls();
+    void draw_visible_walls(bool force = false);
+    void update_world_transform();
     void update_camera();
     lv_obj_t* get_wall_from_pool();
-    void reset_wall_pool();
     void check_collision(float new_x, float new_y, float &out_x, float &out_y);
-    bool is_cell_in_visible_area(int row, int col) const;
 
     // Physics Constants (same as classic)
     static constexpr float FRICTION = 0.92f;
     static constexpr float ACCEL_FACTOR = 0.8f;
     static constexpr float MAX_VELOCITY = 15.0f;
     static constexpr float BOUNCE = 0.3f;
-    static constexpr float SMOOTH_FACTOR = 0.15f;
 };
 
 } // namespace esp_brookesia::apps::gyro_maze
