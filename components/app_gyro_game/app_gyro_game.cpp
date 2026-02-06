@@ -322,8 +322,6 @@ bool GyroGame::resume(void)
     return true;
 }
 
-ESP_UTILS_REGISTER_PLUGIN_WITH_CONSTRUCTOR(systems::base::App, GyroGame, GYRO_GAME_APP_NAME, []() {
-    return std::shared_ptr<GyroGame>(GyroGame::requestInstance(), [](GyroGame *p) {});
-});
+// Registration removed: GyroGame is now integrated into the unified "Juegos Gyro" app (app_gyro_maze)
 
 } // namespace esp_brookesia::apps

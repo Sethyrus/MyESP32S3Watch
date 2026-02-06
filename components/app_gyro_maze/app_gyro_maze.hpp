@@ -23,8 +23,9 @@
 // Forward declaration for Adventure Mode
 namespace esp_brookesia::apps::gyro_maze { class AdventureMode; }
 
-// Launcher icon declaration
+// Launcher icon declarations
 LV_IMG_DECLARE(gyro_maze_icon);
+LV_IMG_DECLARE(gyro_game_icon);
 
 namespace esp_brookesia::apps {
 
@@ -60,6 +61,7 @@ private:
     // Game Modes
     enum GameMode {
         MODE_MENU,
+        MODE_TEST_GYRO,
         MODE_CLASSIC,
         MODE_ADVENTURE
     };
@@ -68,8 +70,9 @@ private:
 
     // UI Methods
     void show_main_menu();
+    void start_test_gyro();
     void start_classic_game();
-    void start_adventure_game(); // Placeholder
+    void start_adventure_game();
     void clean_up_current_screen(); // Helper to clear UI before switching
 
     // Existing Maze Methods

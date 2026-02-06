@@ -22,7 +22,7 @@
 #define ESP_UTILS_LOG_TAG "GyroMaze"
 #include "esp_lib_utils.h"
 
-#define GYRO_MAZE_APP_NAME "Gyro Maze"
+#define GYRO_MAZE_APP_NAME "Juegos Gyro"
 #define GYRO_MAZE_LOG_TAG "GyroMaze"
 
 // Physics constants
@@ -32,6 +32,13 @@
 #define PHYSICS_MAX_VEL 15.0f // Slower than the open game for better control in maze
 #define INPUT_SMOOTHING 0.3f
 #define CALIBRATION_DEADZONE 0.015f
+
+// Test Gyro mode physics constants (from original GyroGame)
+#define TEST_GYRO_FRICTION 0.90f
+#define TEST_GYRO_ACCEL_FACTOR 3.5f
+#define TEST_GYRO_BOUNCE 0.5f
+#define TEST_GYRO_MAX_VEL 30.0f
+#define TEST_GYRO_BOX_SIZE 50
 
 using namespace std;
 using namespace esp_brookesia::gui;
@@ -50,7 +57,7 @@ GyroMaze *GyroMaze::requestInstance(bool use_status_bar, bool use_navigation_bar
 }
 
 GyroMaze::GyroMaze(bool use_status_bar, bool use_navigation_bar):
-    App(GYRO_MAZE_APP_NAME, &gyro_maze_icon, false, use_status_bar, use_navigation_bar),
+    App(GYRO_MAZE_APP_NAME, &gyro_game_icon, false, use_status_bar, use_navigation_bar),
     _container(nullptr), _ball(nullptr), _hole(nullptr), _wall_container(nullptr), _game_timer(nullptr),
     start_row(0), start_col(0), hole_row(0), hole_col(0),
     pos_x(0), pos_y(0), vel_x(0), vel_y(0),
@@ -603,20 +610,116 @@ void GyroMaze::show_main_menu()
 
     std::vector<gyro_maze::MenuItem> items = {
         {
-            "Juego Normal", 
+            "Test Gyro", 
+            [this]() { this->start_test_gyro(); }, 
+            false
+        },
+        {
+            "Simple Maze", 
             [this]() { this->start_classic_game(); }, 
             false
         },
         {
-            "Modo Procedural", 
+            "Big Maze", 
             [this]() { this->start_adventure_game(); }, 
-            false // Now enabled!
+            false
         }
     };
 
     // Use our new reusable menu system
     // Note: We assign the result to _container so clean_up_current_screen() can delete it later
-    _container = gyro_maze::MenuSystem::create(screen, "GYRO MAZE", items);
+    _container = gyro_maze::MenuSystem::create(screen, "JUEGOS GYRO", items);
+}
+
+void GyroMaze::start_test_gyro()
+{
+    _current_mode = MODE_TEST_GYRO;
+    clean_up_current_screen();
+
+    lv_obj_t *screen = lv_scr_act();
+
+    // Create container (black background, same as original GyroGame)
+    _container = lv_obj_create(screen);
+    lv_obj_set_size(_container, screen_width, screen_height);
+    lv_obj_set_style_bg_color(_container, lv_color_black(), 0);
+    lv_obj_set_style_border_width(_container, 0, 0);
+    lv_obj_set_style_radius(_container, 0, 0);
+    lv_obj_clear_flag(_container, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(_container, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(_container, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_center(_container);
+
+    // Calibration Button
+    lv_obj_t *btn_calib = lv_btn_create(_container);
+    lv_obj_t *lb = lv_label_create(btn_calib);
+    lv_label_set_text(lb, "Calibrar");
+    lv_obj_align(btn_calib, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_obj_add_event_cb(btn_calib, event_handler, LV_EVENT_CLICKED, this);
+
+    // Blue Box (reuse _ball pointer)
+    _ball = lv_obj_create(_container);
+    lv_obj_set_size(_ball, TEST_GYRO_BOX_SIZE, TEST_GYRO_BOX_SIZE);
+    lv_obj_set_style_bg_color(_ball, lv_palette_main(LV_PALETTE_BLUE), 0);
+    lv_obj_set_style_radius(_ball, 10, 0);
+    lv_obj_clear_flag(_ball, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Initial position (center of screen)
+    pos_x = (screen_width - TEST_GYRO_BOX_SIZE) / 2.0f;
+    pos_y = (screen_height - TEST_GYRO_BOX_SIZE) / 2.0f;
+    vel_x = 0;
+    vel_y = 0;
+    lv_obj_set_pos(_ball, (lv_coord_t)pos_x, (lv_coord_t)pos_y);
+
+    // Physics Timer (50Hz = 20ms)
+    _game_timer = lv_timer_create([](lv_timer_t *t) {
+        GyroMaze *self = (GyroMaze *)lv_timer_get_user_data(t);
+        if (!self || self->_current_mode != MODE_TEST_GYRO) return;
+
+        float ax, ay;
+        self->read_imu(ax, ay);
+
+        // Direct mapping: read_imu already swaps axes to match screen orientation
+        // This preserves the original GyroGame behavior
+        float force_x = ax;
+        float force_y = ay;
+
+        self->vel_x += force_x * TEST_GYRO_ACCEL_FACTOR;
+        self->vel_y += force_y * TEST_GYRO_ACCEL_FACTOR;
+
+        self->vel_x *= TEST_GYRO_FRICTION;
+        self->vel_y *= TEST_GYRO_FRICTION;
+
+        // Terminal velocity clamp
+        if (self->vel_x > TEST_GYRO_MAX_VEL) self->vel_x = TEST_GYRO_MAX_VEL;
+        if (self->vel_x < -TEST_GYRO_MAX_VEL) self->vel_x = -TEST_GYRO_MAX_VEL;
+        if (self->vel_y > TEST_GYRO_MAX_VEL) self->vel_y = TEST_GYRO_MAX_VEL;
+        if (self->vel_y < -TEST_GYRO_MAX_VEL) self->vel_y = -TEST_GYRO_MAX_VEL;
+
+        // Update position
+        self->pos_x += self->vel_x;
+        self->pos_y += self->vel_y;
+
+        // Wall collisions with bounce
+        if (self->pos_x < 0) {
+            self->pos_x = 0;
+            self->vel_x = -self->vel_x * TEST_GYRO_BOUNCE;
+        }
+        if (self->pos_x > self->screen_width - TEST_GYRO_BOX_SIZE) {
+            self->pos_x = self->screen_width - TEST_GYRO_BOX_SIZE;
+            self->vel_x = -self->vel_x * TEST_GYRO_BOUNCE;
+        }
+        if (self->pos_y < 0) {
+            self->pos_y = 0;
+            self->vel_y = -self->vel_y * TEST_GYRO_BOUNCE;
+        }
+        if (self->pos_y > self->screen_height - TEST_GYRO_BOX_SIZE) {
+            self->pos_y = self->screen_height - TEST_GYRO_BOX_SIZE;
+            self->vel_y = -self->vel_y * TEST_GYRO_BOUNCE;
+        }
+
+        // Update UI
+        lv_obj_set_pos(self->_ball, (lv_coord_t)self->pos_x, (lv_coord_t)self->pos_y);
+    }, 20, this);
 }
 
 void GyroMaze::start_classic_game()
@@ -756,7 +859,7 @@ void GyroMaze::start_adventure_game()
 
 bool GyroMaze::back(void)
 {
-    if (_current_mode == MODE_CLASSIC || _current_mode == MODE_ADVENTURE) {
+    if (_current_mode == MODE_TEST_GYRO || _current_mode == MODE_CLASSIC || _current_mode == MODE_ADVENTURE) {
         show_main_menu();
         return true; // Use back to go up one level
     }
