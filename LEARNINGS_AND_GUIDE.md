@@ -1,20 +1,26 @@
 # ESP-Brookesia Project Guide & Learnings
 
-This document compiles key procedures and technical insights gained during the development of the "Gyro Game" app. It serves as a reference for creating future applications and working with the ESP32-S3-Touch-AMOLED-2.06 hardware.
+This document compiles key procedures and technical insights gained during the development of the "Juegos Gyro" app and related demos. It serves as a reference for creating future applications and working with the ESP32-S3-Touch-AMOLED-2.06 hardware.
 
 ## 1. Creating a New App Component
 
 To create a new app that appears on the device's home screen (Launcher), follow these steps:
 
 ### A. Component Structure
-Create a folder in `components/` (e.g., `components/my_new_app`) with following structure:
+Create a folder in `components/apps/` (e.g., `components/apps/my_new_app`) with following structure:
 ```text
-my_new_app/
+components/apps/my_new_app/
 ├── CMakeLists.txt
 ├── idf_component.yml
 ├── my_new_app.hpp
 └── my_new_app.cpp
 ```
+
+> [!IMPORTANT]
+> Because apps now live under `components/apps/`, the project root `CMakeLists.txt` must include:
+> ```cmake
+> list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/components/apps")
+> ```
 
 ### B. Critical Registration (`WHOLE_ARCHIVE`)
 The most important step for the app to appear on the Home Screen is preventing the linker from stripping the registration constructor. You **MUST** use `WHOLE_ARCHIVE` in your `CMakeLists.txt`:
@@ -28,7 +34,28 @@ idf_component_register(
 )
 ```
 
-### C. App Registration Code
+### C. Apps Layout (Project Convention)
+Apps now live under `components/apps/` so they sit at the same level. For multi-mode apps, keep gameplay modules inside a single component to avoid separate launcher entries. Current structure:
+
+```text
+components/
+├── apps/
+│   ├── app_gyro_games/
+│   │   ├── app_gyro_games.cpp
+│   │   ├── app_gyro_games.hpp
+│   │   ├── modes/
+│   │   │   ├── test_gyro/       # "Test Gyro" mode assets
+│   │   │   ├── simple_maze/     # "Simple Maze" assets
+│   │   │   └── big_maze/        # "Big Maze" logic (adventure_mode.*)
+│   │   └── shared/              # common UI helpers (menu_system.*)
+│   └── brookesia_app_squareline_demo/
+└── brookesia_core/
+```
+
+> [!NOTE]
+> Only `app_gyro_games` registers as an app; its internal modes are just code modules under the same component.
+
+### D. App Registration Code
 Use the `ESP_UTILS_REGISTER_PLUGIN_WITH_CONSTRUCTOR` macro at the end of your `.cpp` file:
 
 ```cpp
@@ -46,10 +73,19 @@ ESP_UTILS_REGISTER_PLUGIN_WITH_CONSTRUCTOR(
 );
 ```
 
-### D. Main Dependency
+### E. Main Dependency
 Ensure `main/CMakeLists.txt` requires your new component so it's part of the build:
 ```cmake
 idf_component_register(SRCS "main.cpp" ... REQUIRES my_new_app)
+```
+
+Example (current):
+```cmake
+idf_component_register(
+    SRCS "main.cpp"
+    INCLUDE_DIRS "."
+    REQUIRES app_gyro_games brookesia_app_squareline_demo
+)
 ```
 
 ---
@@ -136,7 +172,7 @@ To create a clean, edge-to-edge application background:
 
 *   **Force Logs**: If logs aren't showing, force the tag level in your `init()`:
     ```cpp
-    esp_log_level_set("GyroGame", ESP_LOG_INFO);
+    esp_log_level_set("GyroMaze", ESP_LOG_INFO); // Juegos Gyro log tag
     ```
 *   **Frequency**: IMU loops run fast (50Hz+). Avoid logging every frame. Use a counter to log every ~50th frame (1s) to avoid flooding the serial output.
 
@@ -239,7 +275,7 @@ The launcher requires icons to be compiled as C-arrays, not loaded from the file
 
 ### C. Aesthetic Improvements (Script)
 To match the system's aesthetic (rounded corners, shadow), use the provided python script:
-`components/app_gyro_game/modify_icon.py`
+`components/apps/app_gyro_games/modes/test_gyro/modify_icon.py`
 
 ```bash
 # Basic usage (overwrites input file)

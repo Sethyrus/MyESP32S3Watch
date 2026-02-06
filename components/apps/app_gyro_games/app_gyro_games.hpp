@@ -30,7 +30,7 @@ LV_IMG_DECLARE(gyro_game_icon);
 namespace esp_brookesia::apps {
 
 /**
- * @brief Gyro Maze App
+ * @brief Gyro Games App
  */
 class GyroMaze: public systems::phone::App {
 public:

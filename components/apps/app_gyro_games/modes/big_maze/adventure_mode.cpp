@@ -2,7 +2,7 @@
  * Adventure Mode Implementation
  */
 #include "adventure_mode.hpp"
-#include "app_gyro_maze.hpp"
+#include "app_gyro_games.hpp"
 #include "esp_log.h"
 #include "esp_random.h"
 #include <cmath>

@@ -8,12 +8,12 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
-#include "app_gyro_maze.hpp"
+#include "app_gyro_games.hpp"
 #include "esp_brookesia.hpp"
 #include "bsp/esp32_s3_touch_amoled_2_06.h"
 #include "esp_log.h"
 #include "esp_random.h"
-#include "adventure_mode.hpp"
+#include "modes/big_maze/adventure_mode.hpp"
 
 // --- Logging ---
 #ifdef ESP_UTILS_LOG_TAG

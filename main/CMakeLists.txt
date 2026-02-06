@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS "main.cpp"
     INCLUDE_DIRS "."
-    REQUIRES app_gyro_game app_gyro_maze)
+    REQUIRES app_gyro_games brookesia_app_squareline_demo)
 
 target_compile_options(${COMPONENT_LIB} PUBLIC -Wno-missing-field-initializers)
 
