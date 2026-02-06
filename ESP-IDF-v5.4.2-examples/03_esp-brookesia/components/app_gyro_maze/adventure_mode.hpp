@@ -71,6 +71,10 @@ private:
     lv_obj_t *_hole;
     lv_obj_t *_wall_container;
 
+    // Performance: Track last rendered camera position
+    float _last_render_camera_x, _last_render_camera_y;
+    static constexpr float CAMERA_REDRAW_THRESHOLD = 5.0f; // pixels
+
     // Wall Object Pool (for efficient rendering)
     static constexpr int MAX_WALL_OBJECTS = 600; // More than enough for 12x12 * 4 walls
     std::vector<lv_obj_t*> _wall_pool;

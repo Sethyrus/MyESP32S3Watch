@@ -249,3 +249,77 @@ python3 modify_icon.py my_icon.c
 python3 modify_icon.py my_icon.c --radius 28 --shadow 0.2 --backup
 ```
 This script modifies the pixel data directly in the C array to add transparency for corners and a subtle bottom shadow.
+
+---
+
+## 10. LVGL Performance Optimization
+
+### A. The Rendering Bottleneck
+**Problem**: Each LVGL object modification (`lv_obj_set_pos()`, `lv_obj_set_size()`, `lv_obj_add_flag()`, etc.) triggers internal invalidation and redraw logic. Calling these functions every frame (20ms) for hundreds of objects causes severe performance drops.
+
+### B. Optimization Strategies
+
+#### 1. **Conditional Rendering** (Most Important)
+Only redraw UI elements when they actually change:
+
+```cpp
+// BEFORE (BAD): Redraws every frame
+void update() {
+    draw_all_objects();  // Called every 20ms = ~50 calls/second!
+}
+
+// AFTER (GOOD): Only redraw when needed
+void update() {
+    float dx = abs(camera_x - last_camera_x);
+    if (dx > THRESHOLD) {  // e.g., 5 pixels
+        draw_all_objects();
+        last_camera_x = camera_x;
+    }
+}
+```
+
+**Impact**: In the Gyro Maze Adventure mode, this reduced redraw calls from **50/sec** to **~5-10/sec**, improving FPS significantly.
+
+#### 2. **Object Pooling**
+Pre-create LVGL objects and reuse them instead of creating/deleting dynamically:
+
+```cpp
+// Pre-create pool at init
+std::vector<lv_obj_t*> _object_pool;
+for (int i = 0; i < MAX_OBJECTS; i++) {
+    lv_obj_t *obj = lv_obj_create(parent);
+    lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);  // Start hidden
+    _object_pool.push_back(obj);
+}
+
+// Reuse objects each frame
+void render() {
+    int index = 0;
+    for (auto &item : visible_items) {
+        lv_obj_t *obj = _object_pool[index++];
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(obj, item.x, item.y);
+    }
+    // Hide unused objects
+    while (index < _object_pool.size()) {
+        lv_obj_add_flag(_object_pool[index++], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+```
+
+#### 3. **Minimize Style Changes**
+Set styles once at creation, not every frame. Use flags for show/hide instead of changing opacity/color repeatedly.
+
+### C. Performance Monitoring
+Use ESP-IDF's built-in profiling:
+```cpp
+#include "esp_timer.h"
+
+int64_t start = esp_timer_get_time();
+draw_visible_walls();
+int64_t elapsed = esp_timer_get_time() - start;
+ESP_LOGI(TAG, "Render took %lld us", elapsed);
+```
+
+Target: Keep render time **< 10ms** for 50 FPS responsiveness.
+

@@ -25,6 +25,7 @@ AdventureMode::AdventureMode(esp_brookesia::apps::GyroMaze *parent)
       _ball_radius(0),
       _screen_width(0), _screen_height(0),
       _container(nullptr), _ball(nullptr), _hole(nullptr), _wall_container(nullptr),
+      _last_render_camera_x(-9999), _last_render_camera_y(-9999),  // Force initial render
       _wall_pool_index(0)
 {
 }
@@ -480,8 +481,20 @@ void AdventureMode::update(float ax, float ay, float dt) {
     // Update camera to follow player
     update_camera();
 
-    // Redraw visible walls
-    draw_visible_walls();
+    // OPTIMIZATION: Only redraw walls if camera moved significantly
+    float camera_dx = std::abs(_camera_x - _last_render_camera_x);
+    float camera_dy = std::abs(_camera_y - _last_render_camera_y);
+    
+    if (camera_dx > CAMERA_REDRAW_THRESHOLD || camera_dy > CAMERA_REDRAW_THRESHOLD) {
+        draw_visible_walls();
+        _last_render_camera_x = _camera_x;
+        _last_render_camera_y = _camera_y;
+    } else {
+        // Camera didn't move much, just update hole position (it's cheap)
+        float hole_x = _exit_col * _cell_width + (_cell_width - _ball_radius * 2) / 2 - _camera_x;
+        float hole_y = _exit_row * _cell_height + (_cell_height - _ball_radius * 2) / 2 - _camera_y;
+        lv_obj_set_pos(_hole, (lv_coord_t)hole_x, (lv_coord_t)hole_y);
+    }
 }
 
 bool AdventureMode::check_win() const {
