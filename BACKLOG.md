@@ -1,6 +1,5 @@
 # To do
 
-- Añadir swipe para retroceder de un juego al menú principal
 - Mejorar generación del laberinto
 - Quitar "ojos" modo adventure
 
