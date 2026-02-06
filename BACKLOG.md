@@ -3,6 +3,7 @@
 - Añadir swipe para retroceder de un juego al menú principal
 - Revisar fugas de memoria modo aventura
 - Mejorar generación del laberinto
+- Quitar "ojos" modo adventure
 
 # Useful links
 

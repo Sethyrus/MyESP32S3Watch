@@ -269,8 +269,10 @@ void GyroMaze::perform_calibration() {
 
     for (int i = 0; i < samples; i++) {
         if (qmi8658_read_sensor_data(_qmi_dev, &data) == ESP_OK) {
-            sum_x += (data.accelX / 1000.0f);
-            sum_y += (data.accelY / 1000.0f);
+            const float raw_x = -data.accelY / 1000.0f;
+            const float raw_y = data.accelX / 1000.0f;
+            sum_x += raw_x;
+            sum_y += raw_y;
         }
         vTaskDelay(pdMS_TO_TICKS(5));
     }
@@ -402,10 +404,9 @@ void GyroMaze::update_game(lv_timer_t *timer) {
     float ax, ay;
     app->read_imu(ax, ay);
 
-    // Coordinate mapping (same as GyroGame)
-    // Device held naturally: X axis is vertical (force_y), Y axis is horizontal (force_x)
-    float force_x = -ay;
-    float force_y = ax;
+    // read_imu already maps sensor axes to screen axes
+    float force_x = ax;
+    float force_y = ay;
 
     app->vel_x += force_x * PHYSICS_ACCEL_FACTOR;
     app->vel_y += force_y * PHYSICS_ACCEL_FACTOR;
@@ -582,10 +583,15 @@ void GyroMaze::clean_up_current_screen()
 {
     // If there is an active container, clean it
     if (_container) {
-        lv_obj_clean(_container);
-        lv_obj_del(_container);
+        if (lv_obj_is_valid(_container)) {
+            lv_obj_clean(_container);
+            lv_obj_del(_container);
+        }
         _container = nullptr;
     }
+    _ball = nullptr;
+    _hole = nullptr;
+    _wall_container = nullptr;
     // Stop physics timer if running
     if (_game_timer) {
         lv_timer_del(_game_timer);

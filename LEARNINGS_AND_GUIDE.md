@@ -143,10 +143,14 @@ If any direction is wrong, adjust the axis mapping accordingly.
 
 ### D. Calibration
 The sensor has a non-zero bias. Always implement a calibration routine:
-1.  Read ~200 samples at startup (when device is likely flat).
-2.  Calculate average X and Y.
+1.  Read ~100-200 samples at startup (when device is likely flat).
+2.  **Apply the same axis mapping used in `read_imu()` while averaging**, so bias matches the screen axes.
 3.  Store these as `bias_x` / `bias_y`.
 4.  Subtract this bias from every future reading.
+
+> [!NOTE]
+> Avoid double-mapping axes in gameplay updates. Keep the mapping centralized in the IMU read function and use the
+> returned `ax/ay` directly in physics.
 
 ---
 
@@ -240,6 +244,10 @@ bool MyApp::resume(void) {
 
 > [!TIP]
 > Without implementing `pause()`, your timers continue to run even when the app is hidden, wasting CPU cycles and battery!
+
+> [!CAUTION]
+> When closing apps via multitask, the core may auto-clean recorded LVGL resources. If you also delete objects manually,
+> guard with `lv_obj_is_valid()` to prevent double-free crashes.
 
 ---
 
