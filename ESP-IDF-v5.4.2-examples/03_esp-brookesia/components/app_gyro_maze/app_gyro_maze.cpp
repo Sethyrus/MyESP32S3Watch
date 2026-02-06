@@ -13,6 +13,7 @@
 #include "bsp/esp32_s3_touch_amoled_2_06.h"
 #include "esp_log.h"
 #include "esp_random.h"
+#include "adventure_mode.hpp"
 
 // --- Logging ---
 #ifdef ESP_UTILS_LOG_TAG
@@ -57,12 +58,17 @@ GyroMaze::GyroMaze(bool use_status_bar, bool use_navigation_bar):
     imu_initialized(false), calibration_done(false),
     accel_bias_x(0), accel_bias_y(0), 
     _smooth_ax(0), _smooth_ay(0),
-    _qmi_dev(nullptr)
+    _qmi_dev(nullptr),
+    _adventure_mode(nullptr)
 {
 }
 
 GyroMaze::~GyroMaze()
 {
+    if (_adventure_mode) {
+        delete _adventure_mode;
+        _adventure_mode = nullptr;
+    }
     if (_qmi_dev) {
         free(_qmi_dev);
     }
@@ -303,8 +309,11 @@ void GyroMaze::read_imu(float &acc_x, float &acc_y) {
 
     qmi8658_data_t data;
     if (qmi8658_read_sensor_data(_qmi_dev, &data) == ESP_OK) {
-        float raw_x = data.accelX / 1000.0f;
-        float raw_y = data.accelY / 1000.0f;
+        // IMPORTANT: Axis mapping for screen orientation
+        // The physical sensor axes don't match the screen logical axes
+        // Swap X and Y to match screen tilt direction, and invert X
+        float raw_x = -data.accelY / 1000.0f;  // Screen X = -Sensor Y (inverted)
+        float raw_y = data.accelX / 1000.0f;   // Screen Y = Sensor X
 
         if (calibration_done) {
             raw_x -= accel_bias_x;
@@ -580,6 +589,12 @@ void GyroMaze::show_main_menu()
 {
     _current_mode = MODE_MENU;
     clean_up_current_screen();
+    
+    // Clean up adventure mode if it existed
+    if (_adventure_mode) {
+        delete _adventure_mode;
+        _adventure_mode = nullptr;
+    }
 
     lv_obj_t *screen = lv_scr_act();
 
@@ -591,10 +606,8 @@ void GyroMaze::show_main_menu()
         },
         {
             "Modo Procedural", 
-            [this]() { 
-                // No action for disabled button
-            }, 
-            true // Disabled visually
+            [this]() { this->start_adventure_game(); }, 
+            false // Now enabled!
         }
     };
 
@@ -671,6 +684,59 @@ void GyroMaze::start_classic_game()
 
     // 9. Start Logic
     _game_timer = lv_timer_create(timer_cb, 20, this); // 50Hz
+}
+
+void GyroMaze::start_adventure_game()
+{
+    _current_mode = MODE_ADVENTURE;
+    clean_up_current_screen();
+
+    lv_obj_t *screen = lv_scr_act();
+
+    // Main Container (White Background)
+    _container = lv_obj_create(screen);
+    lv_obj_set_size(_container, screen_width, screen_height);
+    lv_obj_set_style_bg_color(_container, lv_color_white(), 0);
+    lv_obj_set_style_border_width(_container, 0, 0);
+    lv_obj_set_style_pad_all(_container, 0, 0);
+    lv_obj_set_style_radius(_container, 0, 0);
+    lv_obj_clear_flag(_container, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_center(_container);
+
+    // Gesture pass through
+    lv_obj_clear_flag(_container, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(_container, LV_OBJ_FLAG_GESTURE_BUBBLE);
+
+    // Initialize Adventure Mode
+    _adventure_mode = new gyro_maze::AdventureMode(this);
+    _adventure_mode->init(_container, screen_width, screen_height, ROWS, COLS);
+
+    // Initialize IMU
+    init_imu();
+
+    // Start physics timer (same rate as classic)
+    _game_timer = lv_timer_create([](lv_timer_t *t) {
+        GyroMaze *self = (GyroMaze *)lv_timer_get_user_data(t);
+        if (self && self->_adventure_mode && self->_current_mode == MODE_ADVENTURE) {
+            if (!self->calibration_done) {
+                self->init_imu();
+                return;
+            }
+            
+            // Read IMU
+            float ax, ay;
+            self->read_imu(ax, ay);
+            
+            // Update Adventure Mode (physics + render)
+            self->_adventure_mode->update(ax, ay, 0.02f); // 20ms dt
+            
+            // Check win
+            if (self->_adventure_mode->check_win()) {
+                ESP_LOGI("GyroMaze", "Adventure Mode: WIN!");
+                self->show_main_menu();
+            }
+        }
+    }, 20, this);
 }
 
 bool GyroMaze::back(void)

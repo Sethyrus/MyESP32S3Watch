@@ -73,11 +73,34 @@ dependencies:
     *   **Normalization**: You MUST divide by `1000.0f` to work with standard `g` units (where 9.8m/s² = 1.0).
     *   **Deadzone**: A deadzone of `0.015f` (after normalization) works well for responsiveness.
 
-### C. Physics & Coordinate Mapping
-For this specific watch orientation:
-*   **X-Axis**: Mapped to `force_y`.
-*   **Y-Axis**: Mapped to `force_x` (inverted `-ay`).
-*   **Smoothing**: A Simple Low Pass Filter (LPF) is essential to remove jitter.
+### C. Axis Mapping for Screen Orientation
+**CRITICAL**: The physical IMU sensor axes do NOT match the logical screen axes. You **MUST** remap them in your code:
+
+**Correct mapping for ESP32-S3-Touch-AMOLED-2.06:**
+```cpp
+// Reading from QMI8658
+qmi8658_data_t data;
+qmi8658_read_sensor_data(_qmi_dev, &data);
+
+// CORRECT axis mapping:
+float screen_x = -data.accelY / 1000.0f;  // Screen X = -Sensor Y (inverted)
+float screen_y = data.accelX / 1000.0f;   // Screen Y = Sensor X
+```
+
+**Why this is needed:**
+- The sensor is physically mounted in a different orientation than the screen's logical coordinate system
+- Without this remapping, tilting the device will move objects in the wrong direction
+- The X-axis also needs inversion (negative sign) to match natural tilt behavior
+
+**Testing the mapping:**
+1. Tilt device **right** → ball should move **right**
+2. Tilt device **left** → ball should move **left**  
+3. Tilt device **up** (away from you) → ball should move **up**
+4. Tilt device **down** (toward you) → ball should move **down**
+
+If any direction is wrong, adjust the axis mapping accordingly.
+
+### D. Calibration & Smoothing
     ```cpp
     smooth_val += ALPHA * (raw_val - smooth_val); // ALPHA ~0.1 to 0.3
     ```

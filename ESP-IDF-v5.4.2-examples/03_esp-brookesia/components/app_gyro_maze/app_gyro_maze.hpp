@@ -19,6 +19,9 @@
 #include <vector>
 #include "menu_system.hpp"
 
+// Forward declaration for Adventure Mode
+namespace esp_brookesia::apps::gyro_maze { class AdventureMode; }
+
 // Launcher icon declaration
 LV_IMG_DECLARE(gyro_maze_icon);
 
@@ -120,6 +123,12 @@ private:
 
     static void timer_cb(lv_timer_t *timer);
     static void event_handler(lv_event_t *e);
+
+    // Adventure Mode
+    gyro_maze::AdventureMode *_adventure_mode;
+
+    // Friend class for Adventure Mode to access IMU
+    friend class gyro_maze::AdventureMode;
 };
 
 } // namespace esp_brookesia::apps
