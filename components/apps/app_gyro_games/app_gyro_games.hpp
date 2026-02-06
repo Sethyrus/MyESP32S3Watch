@@ -55,6 +55,11 @@ private:
     lv_obj_t *_wall_container; // Container for wall blocks
     lv_timer_t *_game_timer;
 
+    // Swipe-to-menu tracking
+    lv_point_t _swipe_start_point;
+    uint32_t _swipe_start_tick_ms;
+    bool _swipe_tracking;
+
     // Maze Configuration
     static const int ROWS = 12;
     static const int COLS = 12;

@@ -61,6 +61,7 @@ void AdventureMode::init(lv_obj_t *container, int screen_w, int screen_h, int vi
     lv_obj_set_style_border_width(_wall_container, 0, 0);
     lv_obj_set_style_pad_all(_wall_container, 0, 0);
     lv_obj_clear_flag(_wall_container, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(_wall_container, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
     // Pre-allocate wall object pool
     _wall_pool.clear();
@@ -86,6 +87,7 @@ void AdventureMode::init(lv_obj_t *container, int screen_w, int screen_h, int vi
     lv_obj_set_style_bg_color(_hole, lv_color_black(), 0);
     lv_obj_set_style_radius(_hole, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_border_width(_hole, 0, 0);
+    lv_obj_clear_flag(_hole, LV_OBJ_FLAG_CLICKABLE);
     _hole_hidden = false;
 
     // Ball (Red circle, fixed at screen center)
@@ -94,6 +96,7 @@ void AdventureMode::init(lv_obj_t *container, int screen_w, int screen_h, int vi
     lv_obj_set_style_bg_color(_ball, lv_palette_main(LV_PALETTE_RED), 0);
     lv_obj_set_style_radius(_ball, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_border_width(_ball, 0, 0);
+    lv_obj_clear_flag(_ball, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_pos(_ball,
         (lv_coord_t)((_screen_width - _ball_radius * 2) / 2),
         (lv_coord_t)((_screen_height - _ball_radius * 2) / 2));

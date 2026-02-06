@@ -59,6 +59,7 @@ GyroMaze *GyroMaze::requestInstance(bool use_status_bar, bool use_navigation_bar
 GyroMaze::GyroMaze(bool use_status_bar, bool use_navigation_bar):
     App(GYRO_MAZE_APP_NAME, &gyro_game_icon, false, use_status_bar, use_navigation_bar),
     _container(nullptr), _ball(nullptr), _hole(nullptr), _wall_container(nullptr), _game_timer(nullptr),
+    _swipe_start_point{0, 0}, _swipe_start_tick_ms(0), _swipe_tracking(false),
     start_row(0), start_col(0), hole_row(0), hole_col(0),
     pos_x(0), pos_y(0), vel_x(0), vel_y(0),
     screen_width(0), screen_height(0), cell_width(0), cell_height(0), ball_radius(0),
@@ -475,8 +476,64 @@ void GyroMaze::timer_cb(lv_timer_t *timer) {
 
 void GyroMaze::event_handler(lv_event_t *e) {
     GyroMaze *app = (GyroMaze *)lv_event_get_user_data(e);
-    if(lv_event_get_code(e) == LV_EVENT_CLICKED) {
-         app->perform_calibration();
+    if (!app) {
+        return;
+    }
+
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_PRESSED) {
+        if (app->_current_mode != MODE_MENU) {
+            lv_indev_t *indev = lv_indev_active();
+            if (indev) {
+                lv_indev_get_point(indev, &app->_swipe_start_point);
+                app->_swipe_start_tick_ms = lv_tick_get();
+                app->_swipe_tracking = true;
+            }
+        }
+        return;
+    }
+
+    if (code == LV_EVENT_RELEASED) {
+        if (app->_swipe_tracking && app->_current_mode != MODE_MENU) {
+            lv_indev_t *indev = lv_indev_active();
+            if (indev) {
+                lv_point_t end_point = {};
+                lv_indev_get_point(indev, &end_point);
+                const int dx = end_point.x - app->_swipe_start_point.x;
+                const int dy = end_point.y - app->_swipe_start_point.y;
+                const uint32_t dt = lv_tick_elaps(app->_swipe_start_tick_ms);
+                constexpr int kSwipeMinDx = -30;
+                constexpr int kSwipeMaxDy = 120;
+                constexpr uint32_t kSwipeMaxDtMs = 1200;
+
+                if (dx <= kSwipeMinDx && std::abs(dy) <= kSwipeMaxDy && dt <= kSwipeMaxDtMs) {
+                    app->show_main_menu();
+                }
+            }
+        }
+        app->_swipe_tracking = false;
+        return;
+    }
+
+    if (code == LV_EVENT_CLICKED) {
+        app->perform_calibration();
+        return;
+    }
+
+    if (code == LV_EVENT_GESTURE) {
+        if (app->_current_mode == MODE_MENU) {
+            return;
+        }
+
+        lv_indev_t *indev = lv_indev_active();
+        if (!indev) {
+            return;
+        }
+
+        lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+        if (dir == LV_DIR_LEFT) {
+            app->show_main_menu();
+        }
     }
 }
 
@@ -510,6 +567,7 @@ void GyroMaze::draw_maze() {
                 lv_obj_set_style_bg_color(b, lv_color_hex(0x8B4513), 0);
                 lv_obj_set_style_radius(b, 0, 0); // sharp corners
                 lv_obj_set_style_border_width(b, 0, 0);
+                lv_obj_clear_flag(b, LV_OBJ_FLAG_CLICKABLE);
                 continue; // Skip drawing walls (and normal pathing) for this cell
             }
 
@@ -523,6 +581,7 @@ void GyroMaze::draw_maze() {
                 lv_obj_set_pos(w, cx, cy);
                 lv_obj_set_style_bg_color(w, lv_color_hex(0x8B4513), 0); // Brown
                 lv_obj_set_style_border_width(w, 0, 0);
+                lv_obj_clear_flag(w, LV_OBJ_FLAG_CLICKABLE);
             }
             if(maze[r][c].wall_left) {
                 lv_obj_t *w = lv_obj_create(_wall_container);
@@ -530,6 +589,7 @@ void GyroMaze::draw_maze() {
                 lv_obj_set_pos(w, cx, cy);
                 lv_obj_set_style_bg_color(w, lv_color_hex(0x8B4513), 0);
                 lv_obj_set_style_border_width(w, 0, 0);
+                lv_obj_clear_flag(w, LV_OBJ_FLAG_CLICKABLE);
             }
             
             // Only need Top and Left generally, plus Bottom/Right for boundary cells
@@ -539,6 +599,7 @@ void GyroMaze::draw_maze() {
                 lv_obj_set_pos(w, cx, cy + ch);
                 lv_obj_set_style_bg_color(w, lv_color_hex(0x8B4513), 0);
                 lv_obj_set_style_border_width(w, 0, 0);
+                lv_obj_clear_flag(w, LV_OBJ_FLAG_CLICKABLE);
             }
             if(c == COLS-1 && maze[r][c].wall_right) {
                 lv_obj_t *w = lv_obj_create(_wall_container);
@@ -546,6 +607,7 @@ void GyroMaze::draw_maze() {
                 lv_obj_set_pos(w, cx + cw, cy);
                 lv_obj_set_style_bg_color(w, lv_color_hex(0x8B4513), 0);
                 lv_obj_set_style_border_width(w, 0, 0);
+                lv_obj_clear_flag(w, LV_OBJ_FLAG_CLICKABLE);
             }
         }
     }
@@ -565,6 +627,9 @@ bool GyroMaze::run(void)
     // Initialize screen dimensions early
     lv_obj_t *screen = lv_obj_create(NULL);
     lv_scr_load(screen);
+    lv_obj_add_event_cb(screen, event_handler, LV_EVENT_GESTURE, this);
+    lv_obj_add_event_cb(screen, event_handler, LV_EVENT_PRESSED, this);
+    lv_obj_add_event_cb(screen, event_handler, LV_EVENT_RELEASED, this);
     screen_width = lv_obj_get_width(screen);
     screen_height = lv_obj_get_height(screen);
     
@@ -651,8 +716,10 @@ void GyroMaze::start_test_gyro()
     lv_obj_set_style_border_width(_container, 0, 0);
     lv_obj_set_style_radius(_container, 0, 0);
     lv_obj_clear_flag(_container, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(_container, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(_container, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(_container, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(_container, event_handler, LV_EVENT_PRESSED, this);
+    lv_obj_add_event_cb(_container, event_handler, LV_EVENT_RELEASED, this);
     lv_obj_center(_container);
 
     // Calibration Button
@@ -660,6 +727,7 @@ void GyroMaze::start_test_gyro()
     lv_obj_t *lb = lv_label_create(btn_calib);
     lv_label_set_text(lb, "Calibrar");
     lv_obj_align(btn_calib, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_obj_add_flag(btn_calib, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(btn_calib, event_handler, LV_EVENT_CLICKED, this);
 
     // Blue Box (reuse _ball pointer)
@@ -668,6 +736,8 @@ void GyroMaze::start_test_gyro()
     lv_obj_set_style_bg_color(_ball, lv_palette_main(LV_PALETTE_BLUE), 0);
     lv_obj_set_style_radius(_ball, 10, 0);
     lv_obj_clear_flag(_ball, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(_ball, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(_ball, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
     // Initial position (center of screen)
     pos_x = (screen_width - TEST_GYRO_BOX_SIZE) / 2.0f;
@@ -746,8 +816,10 @@ void GyroMaze::start_classic_game()
     lv_obj_center(_container);
     
     // Gesture pass through
-    lv_obj_clear_flag(_container, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(_container, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(_container, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(_container, event_handler, LV_EVENT_PRESSED, this);
+    lv_obj_add_event_cb(_container, event_handler, LV_EVENT_RELEASED, this);
     
     // Calculate dimensions based on screen
     cell_width = (float)screen_width / COLS;
@@ -761,6 +833,7 @@ void GyroMaze::start_classic_game()
     lv_obj_set_style_border_width(_wall_container, 0, 0);
     lv_obj_set_style_pad_all(_wall_container, 0, 0); // Remove default padding
     lv_obj_clear_flag(_wall_container, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(_wall_container, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
     // 4. Hole (Black)
     _hole = lv_obj_create(_container);
@@ -768,6 +841,8 @@ void GyroMaze::start_classic_game()
     lv_obj_set_style_bg_color(_hole, lv_color_black(), 0);
     lv_obj_set_style_radius(_hole, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_border_width(_hole, 0, 0);
+    lv_obj_clear_flag(_hole, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(_hole, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
     // 5. Ball (Red)
     _ball = lv_obj_create(_container);
@@ -776,6 +851,8 @@ void GyroMaze::start_classic_game()
     lv_obj_set_style_radius(_ball, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_border_width(_ball, 0, 0);
     lv_obj_clear_flag(_ball, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(_ball, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(_ball, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
     // 6. Generate & Draw Maze
     generate_maze();
@@ -792,6 +869,7 @@ void GyroMaze::start_classic_game()
     lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, 0);
     lv_obj_set_style_shadow_width(btn, 0, 0);
+    lv_obj_add_flag(btn, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(btn, event_handler, LV_EVENT_CLICKED, this);
 
     // 9. Start Logic
@@ -816,7 +894,7 @@ void GyroMaze::start_adventure_game()
     lv_obj_center(_container);
 
     // Gesture pass through
-    lv_obj_clear_flag(_container, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(_container, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(_container, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
     // Initialize Adventure Mode

@@ -222,6 +222,18 @@ The `use_navigation_bar` flag determines how the user exits or switches apps:
 > [!CAUTION]
 > If you call `startRecordResource()` **after** creating UI elements, they will NOT be tracked and the app will not appear in the recents screen!
 
+### App Gestures (Gyro Games)
+For returning to the menu, Gyro Games uses a manual swipe detector based on `LV_EVENT_PRESSED`/`LV_EVENT_RELEASED`
+instead of relying on LVGL's built-in gesture event (which can be swallowed by child objects). Typical tuning:
+
+```cpp
+constexpr int kSwipeMinDx = -30;      // right-to-left
+constexpr int kSwipeMaxDy = 120;      // avoid vertical swipes
+constexpr uint32_t kSwipeMaxDtMs = 1200;
+```
+
+Keep `LV_OBJ_FLAG_GESTURE_BUBBLE` on gameplay objects so the gesture reaches the screen handler.
+
 ---
 
 ## 7. App Lifecycle Management (`pause()`/`resume()`)
