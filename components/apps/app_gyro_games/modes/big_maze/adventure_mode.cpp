@@ -111,10 +111,20 @@ void AdventureMode::init(lv_obj_t *container, int screen_w, int screen_h, int vi
 
 void AdventureMode::cleanup() {
     // Ball is outside wall container
-    if (_ball) { lv_obj_del(_ball); _ball = nullptr; }
+    if (_ball) {
+        if (lv_obj_is_valid(_ball)) {
+            lv_obj_del(_ball);
+        }
+        _ball = nullptr;
+    }
 
     // Deleting wall container also deletes all pooled wall objects and the hole
-    if (_wall_container) { lv_obj_del(_wall_container); _wall_container = nullptr; }
+    if (_wall_container) {
+        if (lv_obj_is_valid(_wall_container)) {
+            lv_obj_del(_wall_container);
+        }
+        _wall_container = nullptr;
+    }
 
     _hole = nullptr;
     _wall_pool.clear();
